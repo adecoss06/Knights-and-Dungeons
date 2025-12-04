@@ -42,17 +42,14 @@ def main_menu():
     # Fade-in effect
     fade = pygame.Surface((WIDTH, HEIGHT))
     fade.fill((0, 0, 0))
-    for alpha in range(255, -1, -15):  # gradually reduce alpha
+    for alpha in range(255, -1, -15):
         fade.set_alpha(alpha)
-        screen.fill((20, 20, 30))  # initial game background color
+        screen.fill((20, 20, 30))
         screen.blit(fade, (0, 0))
         pygame.display.flip()
-        pygame.time.delay(30)  # adjust speed of fade
+        pygame.time.delay(30)
+
 main_menu()
-
-
-
-
 
 # World size
 LEVEL_WIDTH = 3000
@@ -74,20 +71,16 @@ class Player(pygame.sprite.Sprite):
         self.jump_count = 0
         self.space_was_pressed = False
 
-        self.health = 3  # NEW: player health
+        self.health = 3
 
     def handle_input(self):
         keys = pygame.key.get_pressed()
-
-        # Movement
         if keys[pygame.K_LEFT]:
             self.rect.x -= self.speed
         if keys[pygame.K_RIGHT]:
             self.rect.x += self.speed
 
-        # ---- JUMP INPUT LOGIC ----
         space_pressed = keys[pygame.K_SPACE]
-
         if space_pressed and not self.space_was_pressed:
             if self.on_ground:
                 self.vel_y = self.jump_power
@@ -96,7 +89,6 @@ class Player(pygame.sprite.Sprite):
             elif self.jump_count == 1:
                 self.vel_y = self.jump_power
                 self.jump_count = 2
-
         self.space_was_pressed = space_pressed
 
     def apply_gravity(self):
@@ -106,10 +98,7 @@ class Player(pygame.sprite.Sprite):
     def update(self, platforms):
         self.handle_input()
         self.apply_gravity()
-
         self.on_ground = False
-
-        # Landing on Platforms
         for platform in platforms:
             if self.rect.colliderect(platform.rect):
                 if self.vel_y > 0:
@@ -117,13 +106,10 @@ class Player(pygame.sprite.Sprite):
                     self.vel_y = 0
                     self.on_ground = True
                     self.jump_count = 0
-
-        # Keep inside world
         if self.rect.left < 0:
             self.rect.left = 0
         if self.rect.right > LEVEL_WIDTH:
             self.rect.right = LEVEL_WIDTH
-
 
 # --- PLATFORM CLASS ---
 class Platform(pygame.sprite.Sprite):
@@ -133,30 +119,34 @@ class Platform(pygame.sprite.Sprite):
         self.image.fill((120, 80, 40))
         self.rect = self.image.get_rect(topleft=(x, y))
 
-
 # --- ENEMY CLASS ---
 class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y, patrol_width=100, speed=2):
         super().__init__()
         self.image = pygame.Surface((40, 40))
-        self.image.fill((255, 0, 0))  # red box
+        self.image.fill((255, 0, 0))
         self.rect = self.image.get_rect(topleft=(x, y))
         self.start_x = x
         self.patrol_width = patrol_width
         self.speed = speed
-        self.direction = 1  # 1 = right, -1 = left
+        self.direction = 1
 
     def update(self):
         self.rect.x += self.speed * self.direction
-        # Patrol logic
         if self.rect.x > self.start_x + self.patrol_width or self.rect.x < self.start_x:
             self.direction *= -1
 
+# --- GOAL CLASS ---
+class Goal(pygame.sprite.Sprite):
+    def __init__(self, x, y, w=40, h=40):
+        super().__init__()
+        self.image = pygame.Surface((w, h))
+        self.image.fill((0, 255, 0))
+        self.rect = self.image.get_rect(topleft=(x, y))
 
-# Create player
+# Create player, platforms, enemies, and goal
 player = Player(100, 300)
 
-# Platform group
 platforms = pygame.sprite.Group()
 platform_data = [
     (0, 440, 3000, 40),
@@ -170,23 +160,21 @@ platform_data = [
     (2300, 350, 120, 20),
     (2600, 300, 150, 20)
 ]
-
 for p in platform_data:
     platforms.add(Platform(*p))
 
-# Enemy group
 enemies = pygame.sprite.Group()
 enemies.add(Enemy(600, 400, patrol_width=200))
 enemies.add(Enemy(1500, 300, patrol_width=150))
 enemies.add(Enemy(2400, 320, patrol_width=100))
 
+goal = Goal(LEVEL_WIDTH - 100, 400)
 
 # CAMERA FUNCTION
 def get_camera_offset():
     camera_x = player.rect.centerx - WIDTH // 2
     camera_x = max(0, min(camera_x, LEVEL_WIDTH - WIDTH))
     return camera_x
-
 
 # --- GAME OVER SCREEN ---
 def game_over():
@@ -209,23 +197,55 @@ def game_over():
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
-                    # Reset player state
+                    # Reset game
                     player.rect.topleft = (100, 300)
                     player.health = 3
                     player.vel_y = 0
                     player.jump_count = 0
-
-                    # Reset enemies
                     enemies.empty()
                     enemies.add(Enemy(600, 400, patrol_width=200))
                     enemies.add(Enemy(1500, 300, patrol_width=150))
                     enemies.add(Enemy(2400, 320, patrol_width=100))
-
                     running = False
                 elif event.key == pygame.K_q:
                     pygame.quit()
                     sys.exit()
 
+# --- VICTORY SCREEN ---
+def victory_screen():
+    font = pygame.font.SysFont(None, 72)
+    small_font = pygame.font.SysFont(None, 36)
+    title_text = font.render("Victory!", True, (0, 255, 0))
+    restart_text = small_font.render("Press R to Restart", True, (255, 255, 255))
+    exit_text = small_font.render("Press Q to Exit", True, (255, 255, 255))
+
+    waiting = True
+    while waiting:
+        screen.fill((0, 0, 0))
+        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, HEIGHT//2 - 80))
+        screen.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 10))
+        screen.blit(exit_text, (WIDTH//2 - exit_text.get_width()//2, HEIGHT//2 + 50))
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    # Reset game
+                    player.rect.topleft = (100, 300)
+                    player.health = 3
+                    player.vel_y = 0
+                    player.jump_count = 0
+                    enemies.empty()
+                    enemies.add(Enemy(600, 400, patrol_width=200))
+                    enemies.add(Enemy(1500, 300, patrol_width=150))
+                    enemies.add(Enemy(2400, 320, patrol_width=100))
+                    waiting = False
+                elif event.key == pygame.K_q:
+                    pygame.quit()
+                    sys.exit()
 
 # --- GAME LOOP ---
 while True:
@@ -238,13 +258,16 @@ while True:
     player.update(platforms)
     enemies.update()
 
-    # Check collisions with enemies
+    # Collisions with enemies
     if pygame.sprite.spritecollide(player, enemies, False):
         player.health -= 1
-        # move player slightly back to avoid rapid repeated hits
         player.rect.x -= 50
         if player.health <= 0:
             game_over()
+
+    # Collision with goal
+    if player.rect.colliderect(goal.rect):
+        victory_screen()
 
     # Camera offset
     camera_x = get_camera_offset()
@@ -256,6 +279,7 @@ while True:
     for enemy in enemies:
         screen.blit(enemy.image, (enemy.rect.x - camera_x, enemy.rect.y))
     screen.blit(player.image, (player.rect.x - camera_x, player.rect.y))
+    screen.blit(goal.image, (goal.rect.x - camera_x, goal.rect.y))
 
     # Draw health
     font = pygame.font.SysFont(None, 36)
