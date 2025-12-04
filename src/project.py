@@ -15,7 +15,6 @@ FPS = 60
 LEVEL_WIDTH = 3000
 LEVEL_HEIGHT = 480
 
-
 # --- PLAYER CLASS ---
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -29,8 +28,10 @@ class Player(pygame.sprite.Sprite):
         self.jump_power = -15
 
         self.on_ground = False
-        self.jump_count = 0        # 0 = no jumps yet, 1 = jumped once, 2 = double jump used
-        self.space_was_pressed = False  # tracks tap vs hold
+        self.jump_count = 0
+        self.space_was_pressed = False
+
+        self.health = 3  # NEW: player health
 
     def handle_input(self):
         keys = pygame.key.get_pressed()
@@ -44,19 +45,15 @@ class Player(pygame.sprite.Sprite):
         # ---- JUMP INPUT LOGIC ----
         space_pressed = keys[pygame.K_SPACE]
 
-        if space_pressed and not self.space_was_pressed:  
-            # This triggers ONCE per space bar tap
+        if space_pressed and not self.space_was_pressed:
             if self.on_ground:
-                # Normal jump
                 self.vel_y = self.jump_power
                 self.on_ground = False
                 self.jump_count = 1
             elif self.jump_count == 1:
-                # Double jump
                 self.vel_y = self.jump_power
                 self.jump_count = 2
 
-        # Update tracking of key press (for edge detection)
         self.space_was_pressed = space_pressed
 
     def apply_gravity(self):
@@ -72,12 +69,11 @@ class Player(pygame.sprite.Sprite):
         # Landing on Platforms
         for platform in platforms:
             if self.rect.colliderect(platform.rect):
-                if self.vel_y > 0:  
-                    # Land on platform
+                if self.vel_y > 0:
                     self.rect.bottom = platform.rect.top
                     self.vel_y = 0
                     self.on_ground = True
-                    self.jump_count = 0  # reset jumps
+                    self.jump_count = 0
 
         # Keep inside world
         if self.rect.left < 0:
@@ -95,15 +91,32 @@ class Platform(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft=(x, y))
 
 
+# --- ENEMY CLASS ---
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, x, y, patrol_width=100, speed=2):
+        super().__init__()
+        self.image = pygame.Surface((40, 40))
+        self.image.fill((255, 0, 0))  # red box
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.start_x = x
+        self.patrol_width = patrol_width
+        self.speed = speed
+        self.direction = 1  # 1 = right, -1 = left
+
+    def update(self):
+        self.rect.x += self.speed * self.direction
+        # Patrol logic
+        if self.rect.x > self.start_x + self.patrol_width or self.rect.x < self.start_x:
+            self.direction *= -1
+
+
 # Create player
 player = Player(100, 300)
 
 # Platform group
 platforms = pygame.sprite.Group()
-
-# --- LEVEL DESIGN ---
 platform_data = [
-    (0, 440, 3000, 40),      # long ground
+    (0, 440, 3000, 40),
     (200, 350, 120, 20),
     (450, 300, 150, 20),
     (800, 250, 120, 20),
@@ -118,15 +131,53 @@ platform_data = [
 for p in platform_data:
     platforms.add(Platform(*p))
 
+# Enemy group
+enemies = pygame.sprite.Group()
+enemies.add(Enemy(600, 400, patrol_width=200))
+enemies.add(Enemy(1500, 300, patrol_width=150))
+enemies.add(Enemy(2400, 320, patrol_width=100))
+
 
 # CAMERA FUNCTION
 def get_camera_offset():
-    """Camera centers the player on screen while respecting world boundaries."""
     camera_x = player.rect.centerx - WIDTH // 2
-
-    # Keep camera inside world
     camera_x = max(0, min(camera_x, LEVEL_WIDTH - WIDTH))
     return camera_x
+
+
+# --- GAME OVER SCREEN ---
+def game_over():
+    font = pygame.font.SysFont(None, 72)
+    text = font.render("GAME OVER", True, (255, 0, 0))
+    subtext = pygame.font.SysFont(None, 36).render("Press R to retry", True, (255, 255, 255))
+    
+    running = True
+    while running:
+        screen.fill((0, 0, 0))
+        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - text.get_height()//2 - 30))
+        screen.blit(subtext, (WIDTH//2 - subtext.get_width()//2, HEIGHT//2 + 30))
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    # Reset player state
+                    player.rect.topleft = (100, 300)
+                    player.health = 3
+                    player.vel_y = 0
+                    player.jump_count = 0
+
+                    # Reset enemies
+                    enemies.empty()
+                    enemies.add(Enemy(600, 400, patrol_width=200))
+                    enemies.add(Enemy(1500, 300, patrol_width=150))
+                    enemies.add(Enemy(2400, 320, patrol_width=100))
+
+                    running = False
+
 
 
 # --- GAME LOOP ---
@@ -138,19 +189,31 @@ while True:
 
     # Update
     player.update(platforms)
+    enemies.update()
+
+    # Check collisions with enemies
+    if pygame.sprite.spritecollide(player, enemies, False):
+        player.health -= 1
+        # move player slightly back to avoid rapid repeated hits
+        player.rect.x -= 50
+        if player.health <= 0:
+            game_over()
 
     # Camera offset
     camera_x = get_camera_offset()
 
     # Draw
     screen.fill((20, 20, 30))
-
-    # Draw platforms with camera shift
     for platform in platforms:
         screen.blit(platform.image, (platform.rect.x - camera_x, platform.rect.y))
-
-    # Draw player with camera shift
+    for enemy in enemies:
+        screen.blit(enemy.image, (enemy.rect.x - camera_x, enemy.rect.y))
     screen.blit(player.image, (player.rect.x - camera_x, player.rect.y))
+
+    # Draw health
+    font = pygame.font.SysFont(None, 36)
+    health_text = font.render(f"Health: {player.health}", True, (255, 255, 255))
+    screen.blit(health_text, (10, 10))
 
     pygame.display.flip()
     clock.tick(FPS)
