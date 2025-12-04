@@ -11,6 +11,49 @@ pygame.display.set_caption("Platformer Final Project")
 clock = pygame.time.Clock()
 FPS = 60
 
+# --- MAIN MENU FUNCTION ---
+def main_menu():
+    # Load a pixel-style font (or default if unavailable)
+    try:
+        title_font = pygame.font.Font("assets/pixel_font.ttf", 72)
+        instr_font = pygame.font.Font("assets/pixel_font.ttf", 36)
+    except:
+        title_font = pygame.font.SysFont(None, 72)
+        instr_font = pygame.font.SysFont(None, 36)
+
+    title_text = title_font.render("Knights and Dungeons", True, (255, 255, 255))
+    instr_text = instr_font.render("Press ENTER to Start", True, (255, 255, 255))
+
+    waiting = True
+    while waiting:
+        screen.fill((0, 0, 0))
+        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, HEIGHT//2 - 80))
+        screen.blit(instr_text, (WIDTH//2 - instr_text.get_width()//2, HEIGHT//2 + 40))
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    waiting = False
+
+    # Fade-in effect
+    fade = pygame.Surface((WIDTH, HEIGHT))
+    fade.fill((0, 0, 0))
+    for alpha in range(255, -1, -15):  # gradually reduce alpha
+        fade.set_alpha(alpha)
+        screen.fill((20, 20, 30))  # initial game background color
+        screen.blit(fade, (0, 0))
+        pygame.display.flip()
+        pygame.time.delay(30)  # adjust speed of fade
+main_menu()
+
+
+
+
+
 # World size
 LEVEL_WIDTH = 3000
 LEVEL_HEIGHT = 480
@@ -149,13 +192,15 @@ def get_camera_offset():
 def game_over():
     font = pygame.font.SysFont(None, 72)
     text = font.render("GAME OVER", True, (255, 0, 0))
-    subtext = pygame.font.SysFont(None, 36).render("Press R to retry", True, (255, 255, 255))
+    subtext_retry = pygame.font.SysFont(None, 36).render("Press R to Retry", True, (255, 255, 255))
+    subtext_exit = pygame.font.SysFont(None, 36).render("Press Q to Exit", True, (255, 255, 255))
     
     running = True
     while running:
         screen.fill((0, 0, 0))
         screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - text.get_height()//2 - 30))
-        screen.blit(subtext, (WIDTH//2 - subtext.get_width()//2, HEIGHT//2 + 30))
+        screen.blit(subtext_retry, (WIDTH//2 - subtext_retry.get_width()//2, HEIGHT//2 + 10))
+        screen.blit(subtext_exit, (WIDTH//2 - subtext_exit.get_width()//2, HEIGHT//2 + 50))
         pygame.display.flip()
         
         for event in pygame.event.get():
@@ -177,7 +222,9 @@ def game_over():
                     enemies.add(Enemy(2400, 320, patrol_width=100))
 
                     running = False
-
+                elif event.key == pygame.K_q:
+                    pygame.quit()
+                    sys.exit()
 
 
 # --- GAME LOOP ---
