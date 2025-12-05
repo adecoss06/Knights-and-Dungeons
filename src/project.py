@@ -1,5 +1,6 @@
 import pygame
 import sys
+import random
 
 pygame.init()
 
@@ -11,7 +12,17 @@ pygame.display.set_caption("Platformer Final Project")
 clock = pygame.time.Clock()
 FPS = 60
 
-# --- MAIN MENU FUNCTION ---
+# --- DAMAGE EFFECTS GLOBALS ---
+screen_shake = 0
+shake_intensity = 8
+
+red_flash_alpha = 0
+RED_FLASH_MAX = 140
+
+# Particle list for enemy hit bursts
+particles = []
+
+# ---------------- MAIN MENU ----------------
 def main_menu():
     try:
         title_font = pygame.font.Font("assets/pixel_font.ttf", 72)
@@ -34,11 +45,10 @@ def main_menu():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    waiting = False
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                waiting = False
 
-    # Fade-in effect
+    # Fade in
     fade = pygame.Surface((WIDTH, HEIGHT))
     fade.fill((0, 0, 0))
     for alpha in range(255, -1, -15):
@@ -46,7 +56,7 @@ def main_menu():
         screen.fill((20, 20, 30))
         screen.blit(fade, (0, 0))
         pygame.display.flip()
-        pygame.time.delay(30)
+        pygame.time.wait(30)
 
 main_menu()
 
@@ -54,12 +64,15 @@ main_menu()
 LEVEL_WIDTH = 3000
 LEVEL_HEIGHT = 480
 
-# --- PLAYER CLASS ---
+# ---------------- PLAYER ----------------
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         self.image = pygame.Surface((40, 60))
-        self.image.fill((50, 180, 255))
+        self.normal_color = (50, 180, 255)
+        self.attack_color = (180, 0, 255)
+        self.dead_color = (120, 120, 120)
+        self.image.fill(self.normal_color)
         self.rect = self.image.get_rect(topleft=(x, y))
 
         self.vel_y = 0
@@ -69,15 +82,41 @@ class Player(pygame.sprite.Sprite):
         self.on_ground = False
         self.jump_count = 0
         self.space_was_pressed = False
+
         self.health = 3
 
-    def handle_input(self):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            self.rect.x -= self.speed
-        if keys[pygame.K_RIGHT]:
-            self.rect.x += self.speed
+        # Attack mechanic
+        self.is_attacking = False
+        self.attack_timer = 0
+        self.attack_cooldown = 200
 
+        # Invincibility / knockback
+        self.invincible = False
+        self.invincible_timer = 0
+        self.knockback_timer = 0
+        self.knockback_dir = 0  # -1 = left, 1 = right
+
+        # Death state
+        self.dead = False
+        self.death_timer = 0
+
+    def handle_input(self):
+        if self.dead:
+            return
+
+        keys = pygame.key.get_pressed()
+
+        # If under knockback, limit horizontal control
+        if self.knockback_timer <= 0:
+            if keys[pygame.K_LEFT]:
+                self.rect.x -= self.speed
+            if keys[pygame.K_RIGHT]:
+                self.rect.x += self.speed
+        else:
+            # apply knockback push
+            self.rect.x += 10 * self.knockback_dir
+
+        # Jump
         space_pressed = keys[pygame.K_SPACE]
         if space_pressed and not self.space_was_pressed:
             if self.on_ground:
@@ -87,18 +126,72 @@ class Player(pygame.sprite.Sprite):
             elif self.jump_count == 1:
                 self.vel_y = self.jump_power
                 self.jump_count = 2
-
         self.space_was_pressed = space_pressed
+
+        # Attack
+        if keys[pygame.K_x] and not self.is_attacking:
+            self.is_attacking = True
+            self.attack_timer = pygame.time.get_ticks()
+
+    def take_damage(self, source_x):
+        """Apply damage, knockback and screen/flash effects. source_x is the x position of the enemy."""
+        global screen_shake, red_flash_alpha
+
+        if self.invincible or self.dead:
+            return
+
+        # reduce health
+        self.health -= 1
+
+        # invincibility frames
+        self.invincible = True
+        self.invincible_timer = 90  # frames (~1.5 sec at 60fps)
+
+        # knockback direction away from source
+        if source_x > self.rect.centerx:
+            self.knockback_dir = -1
+        else:
+            self.knockback_dir = 1
+        self.knockback_timer = 18  # frames for knockback
+
+        # shake + flash
+        screen_shake = 14
+        red_flash_alpha = RED_FLASH_MAX
+
+        # death condition
+        if self.health <= 0:
+            self.dead = True
+            self.death_timer = 60  # frames of death animation
 
     def apply_gravity(self):
         self.vel_y += 0.7
         self.rect.y += self.vel_y
 
     def update(self, platforms):
+        # invincibility timer
+        if self.invincible:
+            self.invincible_timer -= 1
+            if self.invincible_timer <= 0:
+                self.invincible = False
+
+        if self.knockback_timer > 0:
+            self.knockback_timer -= 1
+
+        if self.dead:
+            # death animation: gray + fall down a bit, then trigger game over
+            self.image.fill(self.dead_color)
+            self.vel_y += 1.0
+            self.rect.y += self.vel_y
+            self.death_timer -= 1
+            if self.death_timer <= 0:
+                game_over()
+            return
+
         self.handle_input()
         self.apply_gravity()
         self.on_ground = False
 
+        # Landing
         for platform in platforms:
             if self.rect.colliderect(platform.rect):
                 if self.vel_y > 0:
@@ -107,12 +200,29 @@ class Player(pygame.sprite.Sprite):
                     self.on_ground = True
                     self.jump_count = 0
 
+        # World boundaries
         if self.rect.left < 0:
             self.rect.left = 0
         if self.rect.right > LEVEL_WIDTH:
             self.rect.right = LEVEL_WIDTH
 
-# --- PLATFORM CLASS ---
+        # Attack timer
+        if self.is_attacking:
+            if pygame.time.get_ticks() - self.attack_timer > self.attack_cooldown:
+                self.is_attacking = False
+
+        # Visual: purple while attacking (invincible blink handled separately)
+        if self.is_attacking:
+            self.image.fill(self.attack_color)
+        else:
+            # quick flicker when invincible
+            if self.invincible and (pygame.time.get_ticks() // 120) % 2 == 0:
+                # dim color for flicker
+                self.image.fill((120, 140, 180))
+            else:
+                self.image.fill(self.normal_color)
+
+# ---------------- PLATFORM ----------------
 class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, w, h):
         super().__init__()
@@ -120,7 +230,7 @@ class Platform(pygame.sprite.Sprite):
         self.image.fill((120, 80, 40))
         self.rect = self.image.get_rect(topleft=(x, y))
 
-# --- ENEMY CLASS ---
+# ---------------- ENEMY ----------------
 class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y, patrol_width=100, speed=2):
         super().__init__()
@@ -131,29 +241,145 @@ class Enemy(pygame.sprite.Sprite):
         self.patrol_width = patrol_width
         self.speed = speed
         self.direction = 1
+        self.hit_flash = 0  # frames to flash white when hit
+        self.dead_anim = 0  # optional death animation timer
 
     def update(self):
+        if self.dead_anim > 0:
+            # fade out or sink
+            self.dead_anim -= 1
+            self.rect.y += 2  # sink down
+            return
+
         self.rect.x += self.speed * self.direction
         if self.rect.x > self.start_x + self.patrol_width or self.rect.x < self.start_x:
             self.direction *= -1
 
-# --- COLLECTIBLE CLASS ---
+    def flash_and_kill(self):
+        """Call when enemy is hit: spawn particles and mark it dead immediately."""
+        # spawn many particles at enemy center
+        for _ in range(12):
+            angle = random.uniform(0, 2 * 3.14159)
+            speed = random.uniform(2, 5)
+            vx = speed * random.uniform(0.5, 1.0) * math.cos(angle) if 'math' in globals() else speed * random.uniform(-1,1)
+            vy = speed * random.uniform(-1.0, -0.2)
+            # fallback simple random if math not imported: use random vx, vy
+            if 'math' not in globals():
+                vx = random.uniform(-4, 4)
+                vy = random.uniform(-4, -1)
+            particles.append({
+                "x": self.rect.centerx,
+                "y": self.rect.centery,
+                "vx": vx,
+                "vy": vy,
+                "life": random.randint(20, 35),
+                "size": random.randint(2, 5)
+            })
+        # mark dead for removal (we'll remove from group)
+        self.dead_anim = 1  # trigger small sink if desired
+
+# ---------------- COLLECTIBLE ----------------
 class Collectible(pygame.sprite.Sprite):
-    def __init__(self, x, y, size=20):
+    def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((size, size))
+        self.image = pygame.Surface((20, 20))
         self.image.fill((255, 255, 0))
         self.rect = self.image.get_rect(topleft=(x, y))
 
-# --- VICTORY BLOCK CLASS ---
+# ---------------- VICTORY BLOCK ----------------
 class VictoryBlock(pygame.sprite.Sprite):
-    def __init__(self, x, y, w=50, h=50):
+    def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((w, h))
+        self.image = pygame.Surface((40, 60))
         self.image.fill((0, 255, 0))
         self.rect = self.image.get_rect(topleft=(x, y))
 
-# --- CREATE GAME OBJECTS ---
+# ---------------- SCENE FUNCTIONS ----------------
+def game_over():
+    font_big = pygame.font.SysFont(None, 72)
+    font_small = pygame.font.SysFont(None, 36)
+
+    text = font_big.render("GAME OVER", True, (255, 0, 0))
+    retry = font_small.render("Press R to Retry", True, (255, 255, 255))
+    exit_game = font_small.render("Press Q to Exit", True, (255, 255, 255))
+
+    running = True
+    while running:
+        screen.fill((0, 0, 0))
+        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - 100))
+        screen.blit(retry, (WIDTH//2 - retry.get_width()//2, HEIGHT//2))
+        screen.blit(exit_game, (WIDTH//2 - exit_game.get_width()//2, HEIGHT//2 + 40))
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    reset_game()
+                    running = False
+                elif event.key == pygame.K_q:
+                    pygame.quit()
+                    sys.exit()
+
+def victory_screen():
+    font_big = pygame.font.SysFont(None, 72)
+    font_small = pygame.font.SysFont(None, 36)
+
+    title = font_big.render("VICTORY!", True, (0, 255, 0))
+    restart = font_small.render("Press R to Restart", True, (255, 255, 255))
+    exit_game = font_small.render("Press Q to Exit", True, (255, 255, 255))
+
+    waiting = True
+    while waiting:
+        screen.fill((0, 0, 0))
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//2 - 100))
+        screen.blit(restart, (WIDTH//2 - restart.get_width()//2, HEIGHT//2))
+        screen.blit(exit_game, (WIDTH//2 - exit_game.get_width()//2, HEIGHT//2 + 40))
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    reset_game()
+                    waiting = False
+                elif event.key == pygame.K_q:
+                    pygame.quit()
+                    sys.exit()
+
+# ---------------- RESET GAME ----------------
+def reset_game():
+    global collected_count, particles, screen_shake, red_flash_alpha
+    player.rect.topleft = (100, 300)
+    player.health = 3
+    player.vel_y = 0
+    player.jump_count = 0
+    player.invincible = False
+    player.invincible_timer = 0
+    player.knockback_timer = 0
+    player.dead = False
+    player.death_timer = 0
+    player.is_attacking = False
+
+    enemies.empty()
+    enemies.add(Enemy(600, 400, 200))
+    enemies.add(Enemy(1500, 300, 150))
+    enemies.add(Enemy(2400, 320, 100))
+
+    collectibles.empty()
+    for pos in collectible_positions:
+        collectibles.add(Collectible(*pos))
+
+    collected_count = 0
+    particles = []
+    screen_shake = 0
+    red_flash_alpha = 0
+
+# ---------------- CREATE WORLD ----------------
 player = Player(100, 300)
 
 platforms = pygame.sprite.Group()
@@ -173,153 +399,148 @@ for p in platform_data:
     platforms.add(Platform(*p))
 
 enemies = pygame.sprite.Group()
-enemies.add(Enemy(600, 400, patrol_width=200))
-enemies.add(Enemy(1500, 300, patrol_width=150))
-enemies.add(Enemy(2400, 320, patrol_width=100))
+enemies.add(Enemy(600, 400, 200))
+enemies.add(Enemy(1500, 300, 150))
+enemies.add(Enemy(2400, 320, 100))
 
+collectible_positions = [(300, 410), (800, 230), (1300, 180), (1900, 260), (2500, 260)]
 collectibles = pygame.sprite.Group()
-collectible_positions = [
-    (250, 310),
-    (500, 260),
-    (850, 210),
-    (1450, 280),
-    (2350, 310)
-]
 for pos in collectible_positions:
     collectibles.add(Collectible(*pos))
+
 collected_count = 0
 
-victory_block = VictoryBlock(2900, 390)
+# Victory block near end of map
+victory_block = VictoryBlock(2800, 380)
 
-# --- CAMERA FUNCTION ---
-def get_camera_offset():
+# Camera
+def get_camera_offset(shake_x=0, shake_y=0):
     camera_x = player.rect.centerx - WIDTH // 2
     camera_x = max(0, min(camera_x, LEVEL_WIDTH - WIDTH))
-    return camera_x
+    return camera_x + shake_x, 0 + shake_y
 
-# --- RESET GAME FUNCTION ---
-def reset_game():
-    global collected_count
-    player.rect.topleft = (100, 300)
-    player.health = 3
-    player.vel_y = 0
-    player.jump_count = 0
-
-    enemies.empty()
-    enemies.add(Enemy(600, 400, patrol_width=200))
-    enemies.add(Enemy(1500, 300, patrol_width=150))
-    enemies.add(Enemy(2400, 320, patrol_width=100))
-
-    collectibles.empty()
-    for pos in collectible_positions:
-        collectibles.add(Collectible(*pos))
-    collected_count = 0
-
-# --- GAME OVER SCREEN ---
-def game_over():
-    font = pygame.font.SysFont(None, 72)
-    text = font.render("GAME OVER", True, (255, 0, 0))
-    subtext_retry = pygame.font.SysFont(None, 36).render("Press R to Retry", True, (255, 255, 255))
-    subtext_exit = pygame.font.SysFont(None, 36).render("Press Q to Exit", True, (255, 255, 255))
-    
-    running = True
-    while running:
-        screen.fill((0, 0, 0))
-        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - text.get_height()//2 - 30))
-        screen.blit(subtext_retry, (WIDTH//2 - subtext_retry.get_width()//2, HEIGHT//2 + 10))
-        screen.blit(subtext_exit, (WIDTH//2 - subtext_exit.get_width()//2, HEIGHT//2 + 50))
-        pygame.display.flip()
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    reset_game()
-                    running = False
-                elif event.key == pygame.K_q:
-                    pygame.quit()
-                    sys.exit()
-
-# --- VICTORY SCREEN ---
-def victory():
-    font = pygame.font.SysFont(None, 72)
-    text = font.render("VICTORY!", True, (0, 255, 0))
-    subtext_restart = pygame.font.SysFont(None, 36).render("Press R to Restart", True, (255, 255, 255))
-    subtext_exit = pygame.font.SysFont(None, 36).render("Press Q to Exit", True, (255, 255, 255))
-    
-    running = True
-    while running:
-        screen.fill((0, 0, 0))
-        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - text.get_height()//2 - 30))
-        screen.blit(subtext_restart, (WIDTH//2 - subtext_restart.get_width()//2, HEIGHT//2 + 10))
-        screen.blit(subtext_exit, (WIDTH//2 - subtext_exit.get_width()//2, HEIGHT//2 + 50))
-        pygame.display.flip()
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    reset_game()
-                    running = False
-                elif event.key == pygame.K_q:
-                    pygame.quit()
-                    sys.exit()
-
-# --- GAME LOOP ---
+# ---------------- MAIN GAME LOOP ----------------
 while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
 
+    # Update
     player.update(platforms)
     enemies.update()
 
-    # --- ENEMY COLLISIONS ---
-    for enemy in enemies.copy():  # copy so we can remove safely
-        if player.rect.colliderect(enemy.rect):
-            if player.vel_y > 0 and player.rect.bottom - enemy.rect.top < 20:  # Stomp detection
-                enemies.remove(enemy)
-                player.vel_y = player.jump_power / 1.5  # bounce slightly
+    # ---- COLLECTIBLES ----
+    hit_list = pygame.sprite.spritecollide(player, collectibles, True)
+    if hit_list:
+        collected_count += len(hit_list)
+
+    # ---- ENEMY COLLISIONS (attack & damage) ----
+    for enemy in enemies.copy():
+        # If player is attacking, compute attack hitbox
+        if player.is_attacking:
+            attack_range = pygame.Rect(0, 0, 50, 40)
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LEFT]:
+                attack_range.topleft = (player.rect.left - 50, player.rect.centery - 20)
             else:
-                player.health -= 1
-                player.rect.x -= 50
-                if player.health <= 0:
-                    game_over()
+                attack_range.topleft = (player.rect.right, player.rect.centery - 20)
 
-    # --- COLLECTIBLES ---
-    for item in collectibles:
-        if player.rect.colliderect(item.rect):
-            collected_count += 1
-            item.kill()
+            if attack_range.colliderect(enemy.rect):
+                # spawn hit particles and remove enemy
+                # use simple burst
+                for _ in range(12):
+                    particles.append({
+                        "x": enemy.rect.centerx + random.uniform(-8,8),
+                        "y": enemy.rect.centery + random.uniform(-8,8),
+                        "vx": random.uniform(-4, 4),
+                        "vy": random.uniform(-6, -1),
+                        "life": random.randint(20, 40),
+                        "size": random.randint(2, 5)
+                    })
+                enemies.remove(enemy)
+                continue
 
-    # --- VICTORY CHECK ---
+        # If player touches enemy normally and not invincible
+        if player.rect.colliderect(enemy.rect):
+            if not player.invincible and not player.is_attacking:
+                player.take_damage(enemy.rect.centerx)
+
+    # ---- VICTORY CONDITION ----
     if player.rect.colliderect(victory_block.rect) and collected_count == len(collectible_positions):
-        victory()
+        victory_screen()
 
-    camera_x = get_camera_offset()
+    # reduce global shake timer
+    if screen_shake > 0:
+        screen_shake -= 1
 
-    # --- DRAW ---
+    # update and draw particles
+    for p in particles[:]:
+        p["x"] += p["vx"]
+        p["y"] += p["vy"]
+        p["vy"] += 0.15  # gravity
+        p["life"] -= 1
+        p["vx"] *= 0.99
+        if p["life"] <= 0:
+            particles.remove(p)
+
+    # Calculate camera shake offsets
+    shake_x = 0
+    shake_y = 0
+    if screen_shake > 0:
+        shake_x = random.randint(-shake_intensity, shake_intensity)
+        shake_y = random.randint(-shake_intensity//2, shake_intensity//2)
+
+    camera_x, camera_y = get_camera_offset(shake_x, shake_y)
+
+    # ---------------- DRAW ----------------
     screen.fill((20, 20, 30))
-    for platform in platforms:
-        screen.blit(platform.image, (platform.rect.x - camera_x, platform.rect.y))
-    for enemy in enemies:
-        screen.blit(enemy.image, (enemy.rect.x - camera_x, enemy.rect.y))
-    for item in collectibles:
-        screen.blit(item.image, (item.rect.x - camera_x, item.rect.y))
-    screen.blit(victory_block.image, (victory_block.rect.x - camera_x, victory_block.rect.y))
-    screen.blit(player.image, (player.rect.x - camera_x, player.rect.y))
 
-    # --- HUD ---
-    font = pygame.font.SysFont(None, 36)
-    health_text = font.render(f"Health: {player.health}", True, (255, 255, 255))
-    collect_text = font.render(f"Collected: {collected_count}/{len(collectible_positions)}", True, (255, 255, 0))
-    screen.blit(health_text, (10, 10))
-    screen.blit(collect_text, (10, 50))
+    # Draw platforms, enemies, collectibles, victory block, player (all shifted by camera_x & shake)
+    for platform in platforms:
+        screen.blit(platform.image, (platform.rect.x - camera_x + shake_x, platform.rect.y - camera_y + shake_y))
+
+    for enemy in enemies:
+        screen.blit(enemy.image, (enemy.rect.x - camera_x + shake_x, enemy.rect.y - camera_y + shake_y))
+
+    for c in collectibles:
+        screen.blit(c.image, (c.rect.x - camera_x + shake_x, c.rect.y - camera_y + shake_y))
+
+    screen.blit(victory_block.image, (victory_block.rect.x - camera_x + shake_x, victory_block.rect.y - camera_y + shake_y))
+
+    screen.blit(player.image, (player.rect.x - camera_x + shake_x, player.rect.y - camera_y + shake_y))
+
+    # draw particles (enemy hit bursts)
+    for p in particles:
+        alpha = max(0, min(255, int(255 * (p["life"] / 40))))
+        surf = pygame.Surface((p["size"], p["size"]), pygame.SRCALPHA)
+        surf.fill((255, 255, 255, alpha))
+        screen.blit(surf, (p["x"] - camera_x + shake_x, p["y"] - camera_y + shake_y))
+
+    # Red flash overlay for damage (fades)
+    if red_flash_alpha > 0:
+        flash_surface = pygame.Surface((WIDTH, HEIGHT))
+        flash_surface.fill((255, 0, 0))
+        flash_surface.set_alpha(int(red_flash_alpha))
+        screen.blit(flash_surface, (0, 0))
+        red_flash_alpha = max(0, red_flash_alpha - 6)
+
+    # Health hearts UI
+    heart_size = 18
+    heart_gap = 6
+    for i in range(3):
+        x = 10 + i * (heart_size + heart_gap)
+        y = 10
+        if i < player.health:
+            color = (220, 20, 60)  # red heart
+        else:
+            color = (80, 80, 80)   # empty heart
+        pygame.draw.rect(screen, color, (x, y, heart_size, heart_size), 0, border_radius=4)
+
+    # Collectible count
+    font = pygame.font.SysFont(None, 28)
+    collect_text = font.render(f"Keys: {collected_count}/{len(collectible_positions)}", True, (255, 255, 0))
+    screen.blit(collect_text, (10, 40))
 
     pygame.display.flip()
     clock.tick(FPS)
