@@ -13,7 +13,6 @@ FPS = 60
 
 # --- MAIN MENU FUNCTION ---
 def main_menu():
-    # Load a pixel-style font (or default if unavailable)
     try:
         title_font = pygame.font.Font("assets/pixel_font.ttf", 72)
         instr_font = pygame.font.Font("assets/pixel_font.ttf", 36)
@@ -70,7 +69,6 @@ class Player(pygame.sprite.Sprite):
         self.on_ground = False
         self.jump_count = 0
         self.space_was_pressed = False
-
         self.health = 3
 
     def handle_input(self):
@@ -89,6 +87,7 @@ class Player(pygame.sprite.Sprite):
             elif self.jump_count == 1:
                 self.vel_y = self.jump_power
                 self.jump_count = 2
+
         self.space_was_pressed = space_pressed
 
     def apply_gravity(self):
@@ -99,6 +98,7 @@ class Player(pygame.sprite.Sprite):
         self.handle_input()
         self.apply_gravity()
         self.on_ground = False
+
         for platform in platforms:
             if self.rect.colliderect(platform.rect):
                 if self.vel_y > 0:
@@ -106,6 +106,7 @@ class Player(pygame.sprite.Sprite):
                     self.vel_y = 0
                     self.on_ground = True
                     self.jump_count = 0
+
         if self.rect.left < 0:
             self.rect.left = 0
         if self.rect.right > LEVEL_WIDTH:
@@ -136,15 +137,23 @@ class Enemy(pygame.sprite.Sprite):
         if self.rect.x > self.start_x + self.patrol_width or self.rect.x < self.start_x:
             self.direction *= -1
 
-# --- GOAL CLASS ---
-class Goal(pygame.sprite.Sprite):
-    def __init__(self, x, y, w=40, h=40):
+# --- COLLECTIBLE CLASS ---
+class Collectible(pygame.sprite.Sprite):
+    def __init__(self, x, y, size=20):
+        super().__init__()
+        self.image = pygame.Surface((size, size))
+        self.image.fill((255, 255, 0))
+        self.rect = self.image.get_rect(topleft=(x, y))
+
+# --- VICTORY BLOCK CLASS ---
+class VictoryBlock(pygame.sprite.Sprite):
+    def __init__(self, x, y, w=50, h=50):
         super().__init__()
         self.image = pygame.Surface((w, h))
         self.image.fill((0, 255, 0))
         self.rect = self.image.get_rect(topleft=(x, y))
 
-# Create player, platforms, enemies, and goal
+# Create player, platforms, enemies, collectibles, victory block
 player = Player(100, 300)
 
 platforms = pygame.sprite.Group()
@@ -168,9 +177,21 @@ enemies.add(Enemy(600, 400, patrol_width=200))
 enemies.add(Enemy(1500, 300, patrol_width=150))
 enemies.add(Enemy(2400, 320, patrol_width=100))
 
-goal = Goal(LEVEL_WIDTH - 100, 400)
+collectibles = pygame.sprite.Group()
+collectible_positions = [
+    (250, 310),
+    (500, 260),
+    (850, 210),
+    (1450, 280),
+    (2350, 310)
+]
+for pos in collectible_positions:
+    collectibles.add(Collectible(*pos))
+collected_count = 0
 
-# CAMERA FUNCTION
+victory_block = VictoryBlock(2900, 390)
+
+# --- CAMERA FUNCTION ---
 def get_camera_offset():
     camera_x = player.rect.centerx - WIDTH // 2
     camera_x = max(0, min(camera_x, LEVEL_WIDTH - WIDTH))
@@ -197,55 +218,56 @@ def game_over():
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
-                    # Reset game
-                    player.rect.topleft = (100, 300)
-                    player.health = 3
-                    player.vel_y = 0
-                    player.jump_count = 0
-                    enemies.empty()
-                    enemies.add(Enemy(600, 400, patrol_width=200))
-                    enemies.add(Enemy(1500, 300, patrol_width=150))
-                    enemies.add(Enemy(2400, 320, patrol_width=100))
+                    reset_game()
                     running = False
                 elif event.key == pygame.K_q:
                     pygame.quit()
                     sys.exit()
 
 # --- VICTORY SCREEN ---
-def victory_screen():
+def victory():
     font = pygame.font.SysFont(None, 72)
-    small_font = pygame.font.SysFont(None, 36)
-    title_text = font.render("Victory!", True, (0, 255, 0))
-    restart_text = small_font.render("Press R to Restart", True, (255, 255, 255))
-    exit_text = small_font.render("Press Q to Exit", True, (255, 255, 255))
-
-    waiting = True
-    while waiting:
+    text = font.render("VICTORY!", True, (0, 255, 0))
+    subtext_restart = pygame.font.SysFont(None, 36).render("Press R to Restart", True, (255, 255, 255))
+    subtext_exit = pygame.font.SysFont(None, 36).render("Press Q to Exit", True, (255, 255, 255))
+    
+    running = True
+    while running:
         screen.fill((0, 0, 0))
-        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, HEIGHT//2 - 80))
-        screen.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 10))
-        screen.blit(exit_text, (WIDTH//2 - exit_text.get_width()//2, HEIGHT//2 + 50))
+        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - text.get_height()//2 - 30))
+        screen.blit(subtext_restart, (WIDTH//2 - subtext_restart.get_width()//2, HEIGHT//2 + 10))
+        screen.blit(subtext_exit, (WIDTH//2 - subtext_exit.get_width()//2, HEIGHT//2 + 50))
         pygame.display.flip()
-
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
-                    # Reset game
-                    player.rect.topleft = (100, 300)
-                    player.health = 3
-                    player.vel_y = 0
-                    player.jump_count = 0
-                    enemies.empty()
-                    enemies.add(Enemy(600, 400, patrol_width=200))
-                    enemies.add(Enemy(1500, 300, patrol_width=150))
-                    enemies.add(Enemy(2400, 320, patrol_width=100))
-                    waiting = False
+                    reset_game()
+                    running = False
                 elif event.key == pygame.K_q:
                     pygame.quit()
                     sys.exit()
+
+# --- RESET GAME FUNCTION ---
+def reset_game():
+    global collected_count
+    player.rect.topleft = (100, 300)
+    player.health = 3
+    player.vel_y = 0
+    player.jump_count = 0
+
+    enemies.empty()
+    enemies.add(Enemy(600, 400, patrol_width=200))
+    enemies.add(Enemy(1500, 300, patrol_width=150))
+    enemies.add(Enemy(2400, 320, patrol_width=100))
+
+    collectibles.empty()
+    for pos in collectible_positions:
+        collectibles.add(Collectible(*pos))
+    collected_count = 0
 
 # --- GAME LOOP ---
 while True:
@@ -254,20 +276,25 @@ while True:
             pygame.quit()
             sys.exit()
 
-    # Update
     player.update(platforms)
     enemies.update()
 
-    # Collisions with enemies
+    # Enemy collisions
     if pygame.sprite.spritecollide(player, enemies, False):
         player.health -= 1
         player.rect.x -= 50
         if player.health <= 0:
             game_over()
 
-    # Collision with goal
-    if player.rect.colliderect(goal.rect):
-        victory_screen()
+    # Collectibles
+    for item in collectibles:
+        if player.rect.colliderect(item.rect):
+            collected_count += 1
+            item.kill()
+
+    # Victory check
+    if player.rect.colliderect(victory_block.rect) and collected_count == len(collectible_positions):
+        victory()
 
     # Camera offset
     camera_x = get_camera_offset()
@@ -278,13 +305,17 @@ while True:
         screen.blit(platform.image, (platform.rect.x - camera_x, platform.rect.y))
     for enemy in enemies:
         screen.blit(enemy.image, (enemy.rect.x - camera_x, enemy.rect.y))
+    for item in collectibles:
+        screen.blit(item.image, (item.rect.x - camera_x, item.rect.y))
+    screen.blit(victory_block.image, (victory_block.rect.x - camera_x, victory_block.rect.y))
     screen.blit(player.image, (player.rect.x - camera_x, player.rect.y))
-    screen.blit(goal.image, (goal.rect.x - camera_x, goal.rect.y))
 
-    # Draw health
+    # HUD
     font = pygame.font.SysFont(None, 36)
     health_text = font.render(f"Health: {player.health}", True, (255, 255, 255))
     screen.blit(health_text, (10, 10))
+    collect_text = font.render(f"Collected: {collected_count}/{len(collectible_positions)}", True, (255, 255, 0))
+    screen.blit(collect_text, (10, 50))
 
     pygame.display.flip()
     clock.tick(FPS)
