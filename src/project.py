@@ -241,14 +241,13 @@ class Enemy(pygame.sprite.Sprite):
         self.patrol_width = patrol_width
         self.speed = speed
         self.direction = 1
-        self.hit_flash = 0  # frames to flash white when hit
-        self.dead_anim = 0  # optional death animation timer
+        self.hit_flash = 0
+        self.dead_anim = 0
 
     def update(self):
         if self.dead_anim > 0:
-            # fade out or sink
             self.dead_anim -= 1
-            self.rect.y += 2  # sink down
+            self.rect.y += 2
             return
 
         self.rect.x += self.speed * self.direction
@@ -256,17 +255,9 @@ class Enemy(pygame.sprite.Sprite):
             self.direction *= -1
 
     def flash_and_kill(self):
-        """Call when enemy is hit: spawn particles and mark it dead immediately."""
-        # spawn many particles at enemy center
         for _ in range(12):
-            angle = random.uniform(0, 2 * 3.14159)
-            speed = random.uniform(2, 5)
-            vx = speed * random.uniform(0.5, 1.0) * math.cos(angle) if 'math' in globals() else speed * random.uniform(-1,1)
-            vy = speed * random.uniform(-1.0, -0.2)
-            # fallback simple random if math not imported: use random vx, vy
-            if 'math' not in globals():
-                vx = random.uniform(-4, 4)
-                vy = random.uniform(-4, -1)
+            vx = random.uniform(-4, 4)
+            vy = random.uniform(-4, -1)
             particles.append({
                 "x": self.rect.centerx,
                 "y": self.rect.centery,
@@ -275,8 +266,7 @@ class Enemy(pygame.sprite.Sprite):
                 "life": random.randint(20, 35),
                 "size": random.randint(2, 5)
             })
-        # mark dead for removal (we'll remove from group)
-        self.dead_anim = 1  # trigger small sink if desired
+        self.dead_anim = 1
 
 # ---------------- COLLECTIBLE ----------------
 class Collectible(pygame.sprite.Sprite):
@@ -298,11 +288,9 @@ class VictoryBlock(pygame.sprite.Sprite):
 def game_over():
     font_big = pygame.font.SysFont(None, 72)
     font_small = pygame.font.SysFont(None, 36)
-
     text = font_big.render("GAME OVER", True, (255, 0, 0))
     retry = font_small.render("Press R to Retry", True, (255, 255, 255))
     exit_game = font_small.render("Press Q to Exit", True, (255, 255, 255))
-
     running = True
     while running:
         screen.fill((0, 0, 0))
@@ -310,7 +298,6 @@ def game_over():
         screen.blit(retry, (WIDTH//2 - retry.get_width()//2, HEIGHT//2))
         screen.blit(exit_game, (WIDTH//2 - exit_game.get_width()//2, HEIGHT//2 + 40))
         pygame.display.flip()
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -326,11 +313,9 @@ def game_over():
 def victory_screen():
     font_big = pygame.font.SysFont(None, 72)
     font_small = pygame.font.SysFont(None, 36)
-
     title = font_big.render("VICTORY!", True, (0, 255, 0))
     restart = font_small.render("Press R to Restart", True, (255, 255, 255))
     exit_game = font_small.render("Press Q to Exit", True, (255, 255, 255))
-
     waiting = True
     while waiting:
         screen.fill((0, 0, 0))
@@ -338,7 +323,6 @@ def victory_screen():
         screen.blit(restart, (WIDTH//2 - restart.get_width()//2, HEIGHT//2))
         screen.blit(exit_game, (WIDTH//2 - exit_game.get_width()//2, HEIGHT//2 + 40))
         pygame.display.flip()
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -410,7 +394,7 @@ for pos in collectible_positions:
 
 collected_count = 0
 
-# Victory block near end of map
+# Victory block
 victory_block = VictoryBlock(2800, 380)
 
 # Camera
@@ -437,7 +421,7 @@ while True:
 
     # ---- ENEMY COLLISIONS (attack & damage) ----
     for enemy in enemies.copy():
-        # If player is attacking, compute attack hitbox
+        # Attack hitbox
         if player.is_attacking:
             attack_range = pygame.Rect(0, 0, 50, 40)
             keys = pygame.key.get_pressed()
@@ -445,10 +429,7 @@ while True:
                 attack_range.topleft = (player.rect.left - 50, player.rect.centery - 20)
             else:
                 attack_range.topleft = (player.rect.right, player.rect.centery - 20)
-
             if attack_range.colliderect(enemy.rect):
-                # spawn hit particles and remove enemy
-                # use simple burst
                 for _ in range(12):
                     particles.append({
                         "x": enemy.rect.centerx + random.uniform(-8,8),
@@ -461,63 +442,57 @@ while True:
                 enemies.remove(enemy)
                 continue
 
-        # If player touches enemy normally and not invincible
-        if player.rect.colliderect(enemy.rect):
-            if not player.invincible and not player.is_attacking:
-                player.take_damage(enemy.rect.centerx)
+        # Enemy damage
+        if player.rect.colliderect(enemy.rect) and not player.invincible and not player.is_attacking:
+            player.take_damage(enemy.rect.centerx)
 
     # ---- VICTORY CONDITION ----
     if player.rect.colliderect(victory_block.rect) and collected_count == len(collectible_positions):
         victory_screen()
 
-    # reduce global shake timer
+    # Screen shake decrement
     if screen_shake > 0:
         screen_shake -= 1
 
-    # update and draw particles
+    # Update particles
     for p in particles[:]:
         p["x"] += p["vx"]
         p["y"] += p["vy"]
-        p["vy"] += 0.15  # gravity
+        p["vy"] += 0.15
         p["life"] -= 1
         p["vx"] *= 0.99
         if p["life"] <= 0:
             particles.remove(p)
 
-    # Calculate camera shake offsets
+    # Camera shake
     shake_x = 0
     shake_y = 0
     if screen_shake > 0:
         shake_x = random.randint(-shake_intensity, shake_intensity)
         shake_y = random.randint(-shake_intensity//2, shake_intensity//2)
-
     camera_x, camera_y = get_camera_offset(shake_x, shake_y)
 
     # ---------------- DRAW ----------------
     screen.fill((20, 20, 30))
 
-    # Draw platforms, enemies, collectibles, victory block, player (all shifted by camera_x & shake)
+    # Platforms, enemies, collectibles, victory block, player
     for platform in platforms:
         screen.blit(platform.image, (platform.rect.x - camera_x + shake_x, platform.rect.y - camera_y + shake_y))
-
     for enemy in enemies:
         screen.blit(enemy.image, (enemy.rect.x - camera_x + shake_x, enemy.rect.y - camera_y + shake_y))
-
     for c in collectibles:
         screen.blit(c.image, (c.rect.x - camera_x + shake_x, c.rect.y - camera_y + shake_y))
-
     screen.blit(victory_block.image, (victory_block.rect.x - camera_x + shake_x, victory_block.rect.y - camera_y + shake_y))
-
     screen.blit(player.image, (player.rect.x - camera_x + shake_x, player.rect.y - camera_y + shake_y))
 
-    # draw particles (enemy hit bursts)
+    # Particles
     for p in particles:
         alpha = max(0, min(255, int(255 * (p["life"] / 40))))
         surf = pygame.Surface((p["size"], p["size"]), pygame.SRCALPHA)
         surf.fill((255, 255, 255, alpha))
         screen.blit(surf, (p["x"] - camera_x + shake_x, p["y"] - camera_y + shake_y))
 
-    # Red flash overlay for damage (fades)
+    # Red flash
     if red_flash_alpha > 0:
         flash_surface = pygame.Surface((WIDTH, HEIGHT))
         flash_surface.fill((255, 0, 0))
@@ -525,22 +500,23 @@ while True:
         screen.blit(flash_surface, (0, 0))
         red_flash_alpha = max(0, red_flash_alpha - 6)
 
-    # Health hearts UI
+    # Health UI
     heart_size = 18
     heart_gap = 6
     for i in range(3):
         x = 10 + i * (heart_size + heart_gap)
         y = 10
-        if i < player.health:
-            color = (220, 20, 60)  # red heart
-        else:
-            color = (80, 80, 80)   # empty heart
+        color = (220, 20, 60) if i < player.health else (80, 80, 80)
         pygame.draw.rect(screen, color, (x, y, heart_size, heart_size), 0, border_radius=4)
 
-    # Collectible count
-    font = pygame.font.SysFont(None, 28)
-    collect_text = font.render(f"Keys: {collected_count}/{len(collectible_positions)}", True, (255, 255, 0))
-    screen.blit(collect_text, (10, 40))
+    # Collectible UI (faint until collected)
+    key_size = 18
+    key_gap = 6
+    for i in range(len(collectible_positions)):
+        x = 10 + i * (key_size + key_gap)
+        y = 40
+        color = (255, 215, 0) if i < collected_count else (120, 120, 60)
+        pygame.draw.rect(screen, color, (x, y, key_size, key_size), 0, border_radius=4)
 
     pygame.display.flip()
     clock.tick(FPS)
