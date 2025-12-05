@@ -153,7 +153,7 @@ class VictoryBlock(pygame.sprite.Sprite):
         self.image.fill((0, 255, 0))
         self.rect = self.image.get_rect(topleft=(x, y))
 
-# Create player, platforms, enemies, collectibles, victory block
+# --- CREATE GAME OBJECTS ---
 player = Player(100, 300)
 
 platforms = pygame.sprite.Group()
@@ -196,6 +196,24 @@ def get_camera_offset():
     camera_x = player.rect.centerx - WIDTH // 2
     camera_x = max(0, min(camera_x, LEVEL_WIDTH - WIDTH))
     return camera_x
+
+# --- RESET GAME FUNCTION ---
+def reset_game():
+    global collected_count
+    player.rect.topleft = (100, 300)
+    player.health = 3
+    player.vel_y = 0
+    player.jump_count = 0
+
+    enemies.empty()
+    enemies.add(Enemy(600, 400, patrol_width=200))
+    enemies.add(Enemy(1500, 300, patrol_width=150))
+    enemies.add(Enemy(2400, 320, patrol_width=100))
+
+    collectibles.empty()
+    for pos in collectible_positions:
+        collectibles.add(Collectible(*pos))
+    collected_count = 0
 
 # --- GAME OVER SCREEN ---
 def game_over():
@@ -251,24 +269,6 @@ def victory():
                     pygame.quit()
                     sys.exit()
 
-# --- RESET GAME FUNCTION ---
-def reset_game():
-    global collected_count
-    player.rect.topleft = (100, 300)
-    player.health = 3
-    player.vel_y = 0
-    player.jump_count = 0
-
-    enemies.empty()
-    enemies.add(Enemy(600, 400, patrol_width=200))
-    enemies.add(Enemy(1500, 300, patrol_width=150))
-    enemies.add(Enemy(2400, 320, patrol_width=100))
-
-    collectibles.empty()
-    for pos in collectible_positions:
-        collectibles.add(Collectible(*pos))
-    collected_count = 0
-
 # --- GAME LOOP ---
 while True:
     for event in pygame.event.get():
@@ -279,27 +279,31 @@ while True:
     player.update(platforms)
     enemies.update()
 
-    # Enemy collisions
-    if pygame.sprite.spritecollide(player, enemies, False):
-        player.health -= 1
-        player.rect.x -= 50
-        if player.health <= 0:
-            game_over()
+    # --- ENEMY COLLISIONS ---
+    for enemy in enemies.copy():  # copy so we can remove safely
+        if player.rect.colliderect(enemy.rect):
+            if player.vel_y > 0 and player.rect.bottom - enemy.rect.top < 20:  # Stomp detection
+                enemies.remove(enemy)
+                player.vel_y = player.jump_power / 1.5  # bounce slightly
+            else:
+                player.health -= 1
+                player.rect.x -= 50
+                if player.health <= 0:
+                    game_over()
 
-    # Collectibles
+    # --- COLLECTIBLES ---
     for item in collectibles:
         if player.rect.colliderect(item.rect):
             collected_count += 1
             item.kill()
 
-    # Victory check
+    # --- VICTORY CHECK ---
     if player.rect.colliderect(victory_block.rect) and collected_count == len(collectible_positions):
         victory()
 
-    # Camera offset
     camera_x = get_camera_offset()
 
-    # Draw
+    # --- DRAW ---
     screen.fill((20, 20, 30))
     for platform in platforms:
         screen.blit(platform.image, (platform.rect.x - camera_x, platform.rect.y))
@@ -310,11 +314,11 @@ while True:
     screen.blit(victory_block.image, (victory_block.rect.x - camera_x, victory_block.rect.y))
     screen.blit(player.image, (player.rect.x - camera_x, player.rect.y))
 
-    # HUD
+    # --- HUD ---
     font = pygame.font.SysFont(None, 36)
     health_text = font.render(f"Health: {player.health}", True, (255, 255, 255))
-    screen.blit(health_text, (10, 10))
     collect_text = font.render(f"Collected: {collected_count}/{len(collectible_positions)}", True, (255, 255, 0))
+    screen.blit(health_text, (10, 10))
     screen.blit(collect_text, (10, 50))
 
     pygame.display.flip()
