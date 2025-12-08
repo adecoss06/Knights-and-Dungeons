@@ -249,8 +249,9 @@ class Collectible(pygame.sprite.Sprite):
 class VictoryBlock(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((40, 60))
-        self.image.fill((0, 255, 0))
+
+        # Load victory gate sprite
+        self.image = pygame.image.load("assets/interactibles/victory_Gate.png").convert_alpha()
         self.rect = self.image.get_rect(topleft=(x, y))
 
 # ---------------- SCENE FUNCTIONS ----------------
@@ -283,18 +284,26 @@ def game_over():
 def victory_screen():
     bg = pygame.image.load("assets/Screens/Victory.png").convert()
     bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
-    font_big = pygame.font.SysFont(None, 72)
+
+    title_img = pygame.image.load("assets/Titles/Victory_Title.png").convert_alpha()
+
     font_small = pygame.font.SysFont(None, 36)
-    title = font_big.render("VICTORY!", True, (0, 255, 0))
     restart = font_small.render("Press R to Restart", True, (255, 255, 255))
     exit_game = font_small.render("Press Q to Exit", True, (255, 255, 255))
+
     waiting = True
     while waiting:
         screen.blit(bg, (0, 0))
-        screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
+
+        # Center VICTORY title image at top
+        screen.blit(title_img, (WIDTH//2 - title_img.get_width()//2, 40))
+
+        # Buttons
         screen.blit(restart, (WIDTH//2 - restart.get_width()//2, HEIGHT//2))
         screen.blit(exit_game, (WIDTH//2 - exit_game.get_width()//2, HEIGHT//2 + 40))
+
         pygame.display.flip()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -366,7 +375,7 @@ for pos in collectible_positions:
 
 collected_count = 0
 
-victory_block = VictoryBlock(2800, 380)
+victory_block = VictoryBlock(2800, 360)
 
 # ---------------- LOAD DUNGEON BACKGROUND ----------------
 dungeon_bg = pygame.image.load("assets/background/map_Background_.png").convert()
