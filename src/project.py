@@ -349,26 +349,55 @@ player = Player(100, 300)
 
 platforms = pygame.sprite.Group()
 platform_data = [
-    (0, 440, 3000, 40),
-    (200, 350, 120, 20),
-    (450, 300, 150, 20),
-    (800, 250, 120, 20),
-    (1100, 200, 150, 20),
-    (1400, 330, 120, 20),
-    (1700, 280, 120, 20),
-    (2000, 220, 180, 20),
-    (2300, 350, 120, 20),
-    (2600, 300, 150, 20)
+    (0, 440, 3000, 40),             # Ground
+
+    # Section 1
+    (350, 330, 150, 20),
+    
+    # Section 2
+    (700, 300, 130, 20), 
+    (900, 240, 130, 20),
+
+    # Section 3 (Skeleton Gauntlet)
+    (1300, 260, 250, 20), 
+    (1600, 200, 180, 20),
+
+    # Section 4 (Final Stretch)
+    (2100, 320, 220, 20), 
+    (2400, 280, 150, 20),
 ]
+
 for p in platform_data:
     platforms.add(Platform(*p))
 
 enemies = pygame.sprite.Group()
-enemies.add(Enemy(600, 400, 200))
-enemies.add(Enemy(1500, 300, 150))
-enemies.add(Enemy(2400, 320, 100))
 
-collectible_positions = [(300, 410), (800, 230), (1300, 180), (1900, 260), (2500, 260)]
+# Section 1 enemy
+enemies.add(Enemy(360, 290, patrol_width=80, speed=2))  
+
+# Section 2 enemy guarding the jump gap * second
+enemies.add(Enemy(890, 200, patrol_width=100, speed=2))
+
+# Section 3 – Skeleton Gauntlet * third
+enemies.add(Enemy(1350, 220, patrol_width=160, speed=2))
+enemies.add(Enemy(1590, 160, patrol_width=120, speed=2.4))
+
+# Section 4 – last enemy before gate * fourth
+enemies.add(Enemy(2120, 280, patrol_width=150, speed=3))
+
+
+collectible_positions = [
+    (390, 300),    # Section 1 platform
+
+    (930, 210),    # Section 2 – higher platform
+
+    (1350, 230),   # Section 3 – left side
+    (1550, 170),   # Section 3 – upper platform collectible
+
+    (2450, 250),   # Section 4 – final collectible
+]
+
+
 collectibles = pygame.sprite.Group()
 for pos in collectible_positions:
     collectibles.add(Collectible(*pos))
