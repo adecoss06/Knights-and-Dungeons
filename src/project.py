@@ -194,11 +194,18 @@ class Player(pygame.sprite.Sprite):
                 self.image.fill(self.normal_color)
 
 # ---------------- PLATFORM ----------------
+# We'll tile platforms using a 40x40 tile sprite.
+TILE_SIZE = 40
+
 class Platform(pygame.sprite.Sprite):
-    def __init__(self, x, y, w, h):
+    def __init__(self, x, y, w, h, tile_surface):
         super().__init__()
-        self.image = pygame.Surface((w, h))
-        self.image.fill((120, 80, 40))
+        # Create a surface sized to the platform
+        self.image = pygame.Surface((w, h), pygame.SRCALPHA)
+        # Tile the platform with the provided tile surface
+        for i in range(0, w, TILE_SIZE):
+            for j in range(0, h, TILE_SIZE):
+                self.image.blit(tile_surface, (i, j))
         self.rect = self.image.get_rect(topleft=(x, y))
 
 # ---------------- ENEMY ----------------
@@ -249,10 +256,35 @@ class Collectible(pygame.sprite.Sprite):
 class VictoryBlock(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-
         # Load victory gate sprite
         self.image = pygame.image.load("assets/interactibles/victory_Gate.png").convert_alpha()
         self.rect = self.image.get_rect(topleft=(x, y))
+
+# ---------------- Helper: fade to white ----------------
+def fade_to_white(duration_ms=800):
+    """Fade the current screen to white over duration_ms milliseconds."""
+    snapshot = screen.copy()
+    white = pygame.Surface((WIDTH, HEIGHT))
+    white.fill((255, 255, 255))
+
+    start = pygame.time.get_ticks()
+    while True:
+        now = pygame.time.get_ticks()
+        t = (now - start) / duration_ms
+        if t >= 1.0:
+            # full white at end
+            screen.blit(snapshot, (0, 0))
+            white.set_alpha(255)
+            screen.blit(white, (0, 0))
+            pygame.display.flip()
+            break
+
+        alpha = int(t * 255)
+        screen.blit(snapshot, (0, 0))
+        white.set_alpha(alpha)
+        screen.blit(white, (0, 0))
+        pygame.display.flip()
+        clock.tick(FPS)
 
 # ---------------- SCENE FUNCTIONS ----------------
 def game_over():
@@ -331,9 +363,11 @@ def reset_game():
     player.is_attacking = False
 
     enemies.empty()
-    enemies.add(Enemy(600, 400, 200))
-    enemies.add(Enemy(1500, 300, 150))
-    enemies.add(Enemy(2400, 320, 100))
+    enemies.add(Enemy(360, 290, patrol_width=80, speed=2))
+    enemies.add(Enemy(930, 200, patrol_width=100, speed=2))
+    enemies.add(Enemy(1350, 220, patrol_width=160, speed=2))
+    enemies.add(Enemy(1590, 160, patrol_width=120, speed=2.4))
+    enemies.add(Enemy(2120, 280, patrol_width=150, speed=3))
 
     collectibles.empty()
     for pos in collectible_positions:
@@ -347,56 +381,74 @@ def reset_game():
 # ---------------- CREATE WORLD ----------------
 player = Player(100, 300)
 
+# Load platform tile (40x40) once
+try:
+    platform_tile = pygame.image.load("assets/platforms/platform_Block.png").convert_alpha()
+    # ensure tile is exactly TILE_SIZE (safe even if already 40)
+    platform_tile = pygame.transform.scale(platform_tile, (TILE_SIZE, TILE_SIZE))
+except Exception as e:
+    # fallback: colored tile if asset missing
+    print("Warning: couldn't load platform tile - using fallback. Error:", e)
+    platform_tile = pygame.Surface((TILE_SIZE, TILE_SIZE))
+    platform_tile.fill((120, 80, 40))
+
 platforms = pygame.sprite.Group()
+# NOTE: widths/heights are snapped to multiples of 40 for perfect tiling
 platform_data = [
     (0, 440, 3000, 40),             # Ground
 
     # Section 1
-    (350, 330, 150, 20),
-    
+    (350, 330, 160, 40),
+
     # Section 2
-    (700, 300, 130, 20), 
-    (900, 240, 130, 20),
+    (700, 300, 120, 40),
+    (900, 240, 120, 40),
 
     # Section 3 (Skeleton Gauntlet)
-    (1300, 260, 250, 20), 
-    (1600, 200, 180, 20),
+    (1300, 260, 240, 40),
+    (1600, 200, 160, 40),
 
     # Section 4 (Final Stretch)
-    (2100, 320, 220, 20), 
-    (2400, 280, 150, 20),
+    (2100, 320, 240, 40),
+    (2400, 280, 160, 40),
 ]
 
 for p in platform_data:
-    platforms.add(Platform(*p))
+    x, y, w, h = p
+    platforms.add(Platform(x, y, w, h, platform_tile))
 
+# Enemies (positioned so their bottoms sit flush on platform surfaces)
 enemies = pygame.sprite.Group()
 
-# Section 1 enemy
-enemies.add(Enemy(360, 290, patrol_width=80, speed=2))  
+# Section 1 enemy (on platform at 350,330)
+enemies.add(Enemy(360, 330 - 40, patrol_width=80, speed=2))
 
-# Section 2 enemy guarding the jump gap * second
-enemies.add(Enemy(890, 200, patrol_width=100, speed=2))
+# Section 2 enemy (on platform at 900,240)
+enemies.add(Enemy(930, 240 - 40, patrol_width=100, speed=2))
 
-# Section 3 – Skeleton Gauntlet * third
-enemies.add(Enemy(1350, 220, patrol_width=160, speed=2))
-enemies.add(Enemy(1590, 160, patrol_width=120, speed=2.4))
+# Section 3 – Skeleton Gauntlet
+enemies.add(Enemy(1350, 260 - 40, patrol_width=160, speed=2))
+enemies.add(Enemy(1590, 200 - 40, patrol_width=120, speed=2.4))
 
-# Section 4 – last enemy before gate * fourth
-enemies.add(Enemy(2120, 280, patrol_width=150, speed=3))
+# Section 4 – last enemy before gate
+enemies.add(Enemy(2120, 320 - 40, patrol_width=150, speed=3))
 
-
+# Collectibles: placed on top of platforms (centered-ish)
 collectible_positions = [
-    (390, 300),    # Section 1 platform
+    # Section 1 (platform at 350,330, width 160) -> place near center
+    (350 + 160//2 - 10, 330 - 20),
 
-    (930, 210),    # Section 2 – higher platform
+    # Section 2 (higher platform at 900,240)
+    (900 + 120//2 - 10, 240 - 20),
 
-    (1350, 230),   # Section 3 – left side
-    (1550, 170),   # Section 3 – upper platform collectible
+    # Section 3 left platform (1300,260 width 240)
+    (1300 + 240//2 - 10, 260 - 20),
+    # Section 3 upper platform (1600,200 width 160)
+    (1600 + 160//2 - 10, 200 - 20),
 
-    (2450, 250),   # Section 4 – final collectible
+    # Section 4 final collectible on last platform (2400,280 width 160)
+    (2400 + 160//2 - 10, 280 - 20),
 ]
-
 
 collectibles = pygame.sprite.Group()
 for pos in collectible_positions:
@@ -417,6 +469,8 @@ def get_camera_offset(shake_x=0, shake_y=0):
     return camera_x + shake_x, 0 + shake_y
 
 # ---------------- MAIN GAME LOOP ----------------
+trigger_victory = False
+
 while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -455,8 +509,9 @@ while True:
         if player.rect.colliderect(enemy.rect) and not player.invincible and not player.is_attacking:
             player.take_damage(enemy.rect.centerx)
 
+    # If player reaches victory gate and all collectibles collected, trigger fade+victory.
     if player.rect.colliderect(victory_block.rect) and collected_count == len(collectible_positions):
-        victory_screen()
+        trigger_victory = True
 
     if screen_shake > 0:
         screen_shake -= 1
@@ -504,6 +559,7 @@ while True:
         screen.blit(flash_surface, (0, 0))
         red_flash_alpha = max(0, red_flash_alpha - 6)
 
+    # Health UI
     heart_size = 18
     heart_gap = 6
     for i in range(3):
@@ -512,6 +568,7 @@ while True:
         color = (220, 20, 60) if i < player.health else (80, 80, 80)
         pygame.draw.rect(screen, color, (x, y, heart_size, heart_size), 0, border_radius=4)
 
+    # Collectible UI (faint until collected)
     key_size = 18
     key_gap = 6
     for i in range(len(collectible_positions)):
@@ -521,4 +578,12 @@ while True:
         pygame.draw.rect(screen, color, (x, y, key_size, key_size), 0, border_radius=4)
 
     pygame.display.flip()
+
+    # If victory triggered, do fade-to-white transition, then show victory screen.
+    if trigger_victory:
+        fade_to_white(800)
+        victory_screen()
+        trigger_victory = False
+        # After victory_screen (which can call reset_game), continue main loop
+
     clock.tick(FPS)
