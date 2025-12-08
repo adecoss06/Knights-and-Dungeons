@@ -299,18 +299,33 @@ class VictoryBlock(pygame.sprite.Sprite):
 
 # ---------------- SCENE FUNCTIONS ----------------
 def game_over():
-    font_big = pygame.font.SysFont(None, 72)
+    # Load background + title images
+    bg = pygame.image.load("assets/Screens/gameOver.png").convert()
+    bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
+
+    title_img = pygame.image.load("assets/Titles/gameOver_Title.png").convert_alpha()
+
     font_small = pygame.font.SysFont(None, 36)
-    text = font_big.render("GAME OVER", True, (255, 0, 0))
     retry = font_small.render("Press R to Retry", True, (255, 255, 255))
     exit_game = font_small.render("Press Q to Exit", True, (255, 255, 255))
+
     running = True
     while running:
-        screen.fill((0, 0, 0))
-        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - 100))
+        # Draw background
+        screen.blit(bg, (0, 0))
+
+        # Draw title centered at the top
+        screen.blit(title_img, (
+            WIDTH//2 - title_img.get_width()//2,
+            40
+        ))
+
+        # Draw buttons centered
         screen.blit(retry, (WIDTH//2 - retry.get_width()//2, HEIGHT//2))
         screen.blit(exit_game, (WIDTH//2 - exit_game.get_width()//2, HEIGHT//2 + 40))
+
         pygame.display.flip()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -318,10 +333,11 @@ def game_over():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
                     reset_game()
-                    running = False
+                    return
                 elif event.key == pygame.K_q:
                     pygame.quit()
                     sys.exit()
+
 
 def victory_screen():
     font_big = pygame.font.SysFont(None, 72)
