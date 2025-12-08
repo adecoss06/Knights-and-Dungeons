@@ -71,7 +71,6 @@ def main_menu():
         pygame.display.flip()
         pygame.time.wait(30)
 
-
 main_menu()
 
 # World size
