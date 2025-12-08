@@ -340,18 +340,34 @@ def game_over():
 
 
 def victory_screen():
+    # Load background image
+    bg = pygame.image.load("assets/Screens/Victory.png").convert()
+    bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
+
     font_big = pygame.font.SysFont(None, 72)
     font_small = pygame.font.SysFont(None, 36)
+
+    # Victory title
     title = font_big.render("VICTORY!", True, (0, 255, 0))
+
+    # Instructions
     restart = font_small.render("Press R to Restart", True, (255, 255, 255))
     exit_game = font_small.render("Press Q to Exit", True, (255, 255, 255))
+
     waiting = True
     while waiting:
-        screen.fill((0, 0, 0))
-        screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//2 - 100))
+        # Draw background
+        screen.blit(bg, (0, 0))
+
+        # Draw title at top center
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
+
+        # Draw instructions centered below
         screen.blit(restart, (WIDTH//2 - restart.get_width()//2, HEIGHT//2))
         screen.blit(exit_game, (WIDTH//2 - exit_game.get_width()//2, HEIGHT//2 + 40))
+
         pygame.display.flip()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -363,6 +379,8 @@ def victory_screen():
                 elif event.key == pygame.K_q:
                     pygame.quit()
                     sys.exit()
+
+
 
 # ---------------- RESET GAME ----------------
 def reset_game():
