@@ -23,22 +23,35 @@ RED_FLASH_MAX = 140
 particles = []
 
 # ---------------- MAIN MENU ----------------
+# ---------------- MAIN MENU ----------------
 def main_menu():
+    # Load background + title images
+    bg = pygame.image.load("assets/Screens/mainMenu.png").convert()
+    bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))  # scale to window
+
+    title_img = pygame.image.load("assets/Titles/mainMenu_Title.png").convert_alpha()
+
     try:
-        title_font = pygame.font.Font("assets/pixel_font.ttf", 72)
         instr_font = pygame.font.Font("assets/pixel_font.ttf", 36)
     except:
-        title_font = pygame.font.SysFont(None, 72)
         instr_font = pygame.font.SysFont(None, 36)
 
-    title_text = title_font.render("Knights and Dungeons", True, (255, 255, 255))
     instr_text = instr_font.render("Press ENTER to Start", True, (255, 255, 255))
 
+    # Main menu loop
     waiting = True
     while waiting:
-        screen.fill((0, 0, 0))
-        screen.blit(title_text, (WIDTH//2 - title_text.get_width()//2, HEIGHT//2 - 80))
-        screen.blit(instr_text, (WIDTH//2 - instr_text.get_width()//2, HEIGHT//2 + 40))
+        screen.blit(bg, (0, 0))
+
+        # Title image: top-right corner
+        screen.blit(title_img, (WIDTH - title_img.get_width() - 20, 20))
+
+        # Instruction centered
+        screen.blit(
+            instr_text,
+            (WIDTH//2 - instr_text.get_width()//2, HEIGHT//2 + 120)
+        )
+
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -48,15 +61,16 @@ def main_menu():
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                 waiting = False
 
-    # Fade in
+    # Fade in transition
     fade = pygame.Surface((WIDTH, HEIGHT))
     fade.fill((0, 0, 0))
     for alpha in range(255, -1, -15):
         fade.set_alpha(alpha)
-        screen.fill((20, 20, 30))
+        screen.blit(bg, (0, 0))
         screen.blit(fade, (0, 0))
         pygame.display.flip()
         pygame.time.wait(30)
+
 
 main_menu()
 
