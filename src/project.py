@@ -12,7 +12,7 @@ pygame.display.set_caption("Platformer Final Project")
 clock = pygame.time.Clock()
 FPS = 60
 
-# --- DAMAGE EFFECTS GLOBALS ---
+# DAMAGE EFFECTS GLOBALS
 screen_shake = 0
 shake_intensity = 8
 
@@ -318,9 +318,15 @@ class Enemy(pygame.sprite.Sprite):
 class Collectible(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((20, 20))
-        self.image.fill((255, 255, 0))
+        try:
+            self.image = pygame.image.load("assets/interactibles/key_Collectible.png").convert_alpha()
+        except Exception as e:
+            print("Error loading collectible image:", e)
+            # fallback: yellow square
+            self.image = pygame.Surface((20, 20))
+            self.image.fill((255, 255, 0))
         self.rect = self.image.get_rect(topleft=(x, y))
+
 
 # ---------------- VICTORY BLOCK ----------------
 class VictoryBlock(pygame.sprite.Sprite):
@@ -396,7 +402,7 @@ def victory_screen():
     while waiting:
         screen.blit(bg, (0, 0))
 
-        # Center VICTORY title image at top
+        # VICTORY title
         screen.blit(title_img, (WIDTH//2 - title_img.get_width()//2, 40))
 
         # Buttons
@@ -450,21 +456,18 @@ def reset_game():
 # ---------------- CREATE WORLD ----------------
 player = Player(100, 300)
 
-# Load platform tile (40x40) once
+# Load platform 
 try:
     platform_tile = pygame.image.load("assets/platforms/platform_Block.png").convert_alpha()
-    # ensure tile is exactly TILE_SIZE (safe even if already 40)
     platform_tile = pygame.transform.scale(platform_tile, (TILE_SIZE, TILE_SIZE))
 except Exception as e:
-    # fallback: colored tile if asset missing
     print("Warning: couldn't load platform tile - using fallback. Error:", e)
     platform_tile = pygame.Surface((TILE_SIZE, TILE_SIZE))
     platform_tile.fill((120, 80, 40))
 
 platforms = pygame.sprite.Group()
-# NOTE: widths/heights are snapped to multiples of 40 for perfect tiling
 platform_data = [
-    (0, 440, 3000, 40),             # Ground
+    (0, 440, 3000, 40),             
 
     # Section 1
     (350, 330, 160, 40),
@@ -489,10 +492,10 @@ for p in platform_data:
 # Enemies (positioned so their bottoms sit flush on platform surfaces)
 enemies = pygame.sprite.Group()
 
-# Section 1 enemy (on platform at 350,330)
+# Section 1 enemy 
 enemies.add(Enemy(360, 290, patrol_width=80, speed=2))
 
-# Section 2 enemy (on platform at 900,240)
+# Section 2 enemy 
 enemies.add(Enemy(890, 200, patrol_width=100, speed=2))
 
 # Section 3 – Skeleton Gauntlet
@@ -502,20 +505,20 @@ enemies.add(Enemy(1590, 160, patrol_width=120, speed=2.4))
 # Section 4 – last enemy before gate
 enemies.add(Enemy(2120, 280, patrol_width=150, speed=3))
 
-# Collectibles: placed on top of platforms (centered-ish)
+# Collectibles: placed on top of platforms 
 collectible_positions = [
-    # Section 1 (platform at 350,330, width 160) -> place near center
+    # Section 1 
     (350 + 160//2 - 10, 330 - 20),
 
-    # Section 2 (higher platform at 900,240)
+    # Section 2 
     (900 + 120//2 - 10, 240 - 20),
 
-    # Section 3 left platform (1300,260 width 240)
+    # Section 3 left platform 
     (1300 + 240//2 - 10, 260 - 20),
-    # Section 3 upper platform (1600,200 width 160)
+    # Section 3 upper platform 
     (1600 + 160//2 - 10, 200 - 20),
 
-    # Section 4 final collectible on last platform (2400,280 width 160)
+    # Section 4 final collectible on last platform 
     (2400 + 160//2 - 10, 280 - 20),
 ]
 
@@ -602,7 +605,7 @@ while True:
     camera_x, camera_y = get_camera_offset(shake_x, shake_y)
 
     # ---------------- DRAW ----------------
-    # Parallax background (moves slower)
+    # Parallax background
     parallax_x = -camera_x * 0.5
     screen.blit(dungeon_bg, (parallax_x, -camera_y))
 
