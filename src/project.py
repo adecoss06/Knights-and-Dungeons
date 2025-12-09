@@ -71,32 +71,62 @@ LEVEL_HEIGHT = 480
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((40, 60))
-        self.normal_color = (50, 180, 255)
-        self.attack_color = (180, 0, 255)
-        self.dead_color = (120, 120, 120)
-        self.image.fill(self.normal_color)
+
+        # Load sprites
+        self.idle = pygame.image.load("assets/player/player_Idle.png").convert_alpha()
+        self.walk_right = [
+            pygame.image.load("assets/player/player_Walk1.png").convert_alpha(),
+            pygame.image.load("assets/player/player_Walk2.png").convert_alpha(),
+            pygame.image.load("assets/player/player_Walk3.png").convert_alpha()
+        ]
+        self.walk_left = [pygame.transform.flip(frame, True, False) for frame in self.walk_right]
+
+        self.jump_frames = [
+            pygame.image.load("assets/player/player_Jump1.png").convert_alpha(),
+            pygame.image.load("assets/player/player_Jump2.png").convert_alpha()
+        ]
+
+        self.attack_right = [
+            pygame.image.load("assets/player/player_Attack1.png").convert_alpha(),
+            pygame.image.load("assets/player/player_Attack2.png").convert_alpha(),
+            pygame.image.load("assets/player/player_Attack3.png").convert_alpha()
+        ]
+        self.attack_left = [pygame.transform.flip(frame, True, False) for frame in self.attack_right]
+
+        # Initial state
+        self.image = self.idle
         self.rect = self.image.get_rect(topleft=(x, y))
 
+        # Movement
         self.vel_y = 0
         self.speed = 5
         self.jump_power = -15
-
         self.on_ground = False
         self.jump_count = 0
         self.space_was_pressed = False
 
+        # Health
         self.health = 3
 
+        # Attack
         self.is_attacking = False
         self.attack_timer = 0
-        self.attack_cooldown = 200
+        self.attack_cooldown = 300
+        self.attack_index = 0
+        self.attack_speed = 0.2
 
+        # Animation
+        self.animation_index = 0
+        self.animation_speed = 0.15
+        self.direction = 1 
+
+        # Invincibility/knockback
         self.invincible = False
         self.invincible_timer = 0
         self.knockback_timer = 0
         self.knockback_dir = 0
 
+        # Death
         self.dead = False
         self.death_timer = 0
 
@@ -104,14 +134,19 @@ class Player(pygame.sprite.Sprite):
         if self.dead:
             return
         keys = pygame.key.get_pressed()
+
+        # Horizontal movement
         if self.knockback_timer <= 0:
             if keys[pygame.K_LEFT]:
                 self.rect.x -= self.speed
+                self.direction = -1
             if keys[pygame.K_RIGHT]:
                 self.rect.x += self.speed
+                self.direction = 1
         else:
             self.rect.x += 10 * self.knockback_dir
 
+        # Jumping / double jump
         space_pressed = keys[pygame.K_SPACE]
         if space_pressed and not self.space_was_pressed:
             if self.on_ground:
@@ -123,9 +158,11 @@ class Player(pygame.sprite.Sprite):
                 self.jump_count = 2
         self.space_was_pressed = space_pressed
 
+        # Attacking
         if keys[pygame.K_x] and not self.is_attacking:
             self.is_attacking = True
             self.attack_timer = pygame.time.get_ticks()
+            self.attack_index = 0
 
     def take_damage(self, source_x):
         global screen_shake, red_flash_alpha
@@ -147,6 +184,7 @@ class Player(pygame.sprite.Sprite):
         self.rect.y += self.vel_y
 
     def update(self, platforms):
+        # Invincibility timer
         if self.invincible:
             self.invincible_timer -= 1
             if self.invincible_timer <= 0:
@@ -155,46 +193,62 @@ class Player(pygame.sprite.Sprite):
         if self.knockback_timer > 0:
             self.knockback_timer -= 1
 
+        # Dead state
         if self.dead:
-            self.image.fill(self.dead_color)
-            self.vel_y += 1.0
-            self.rect.y += self.vel_y
+            self.rect.y += 1.0
             self.death_timer -= 1
             if self.death_timer <= 0:
                 game_over()
             return
 
+        # Update movement
         self.handle_input()
         self.apply_gravity()
         self.on_ground = False
 
+        # Platform collision
         for platform in platforms:
-            if self.rect.colliderect(platform.rect):
-                if self.vel_y > 0:
-                    self.rect.bottom = platform.rect.top
-                    self.vel_y = 0
-                    self.on_ground = True
-                    self.jump_count = 0
+            if self.rect.colliderect(platform.rect) and self.vel_y >= 0:
+                self.rect.bottom = platform.rect.top
+                self.vel_y = 0
+                self.on_ground = True
+                self.jump_count = 0
 
+        # Boundaries
         if self.rect.left < 0:
             self.rect.left = 0
         if self.rect.right > LEVEL_WIDTH:
             self.rect.right = LEVEL_WIDTH
 
+        # ---- ANIMATION ----
         if self.is_attacking:
-            if pygame.time.get_ticks() - self.attack_timer > self.attack_cooldown:
+            self.attack_index += self.attack_speed
+            if self.direction == 1:
+                frames = self.attack_right
+            else:
+                frames = self.attack_left
+
+            if self.attack_index >= len(frames):
+                self.attack_index = 0
                 self.is_attacking = False
 
-        if self.is_attacking:
-            self.image.fill(self.attack_color)
+            self.image = frames[int(self.attack_index)]
+        elif not self.on_ground:
+            # Jumping - keep last jump frame until landing
+            self.image = self.jump_frames[-1]
+        elif pygame.key.get_pressed()[pygame.K_LEFT] or pygame.key.get_pressed()[pygame.K_RIGHT]:
+            # Walking
+            self.animation_index += self.animation_speed
+            frames = self.walk_right if self.direction == 1 else self.walk_left
+            if self.animation_index >= len(frames):
+                self.animation_index = 0
+            self.image = frames[int(self.animation_index)]
         else:
-            if self.invincible and (pygame.time.get_ticks() // 120) % 2 == 0:
-                self.image.fill((120, 140, 180))
-            else:
-                self.image.fill(self.normal_color)
+            # Idle
+            self.image = self.idle
+
 
 # ---------------- PLATFORM ----------------
-# We'll tile platforms using a 40x40 tile sprite.
 TILE_SIZE = 40
 
 class Platform(pygame.sprite.Sprite):
@@ -212,37 +266,53 @@ class Platform(pygame.sprite.Sprite):
 class Enemy(pygame.sprite.Sprite):
     def __init__(self, x, y, patrol_width=100, speed=2):
         super().__init__()
-        self.image = pygame.Surface((40, 40))
-        self.image.fill((255, 0, 0))
+        self.images = [
+            pygame.image.load("assets/enemies/enemy_Walk1.png").convert_alpha(),
+            pygame.image.load("assets/enemies/enemy_Walk2.png").convert_alpha(),
+            pygame.image.load("assets/enemies/enemy_Walk3.png").convert_alpha()
+        ]
+        self.image = self.images[0]
         self.rect = self.image.get_rect(topleft=(x, y))
+
+        self.hitbox_offset_x = .5
+        self.hitbox_offset_y = .5
+        self.hitbox = pygame.Rect(
+            self.rect.x + self.hitbox_offset_x, 
+            self.rect.y + self.hitbox_offset_y,
+            self.rect.width - .5*self.hitbox_offset_x,
+            self.rect.height - .5*self.hitbox_offset_y
+        )
+
         self.start_x = x
         self.patrol_width = patrol_width
         self.speed = speed
         self.direction = 1
         self.dead_anim = 0
+        self.animation_index = 0
+        self.animation_speed = 0.1
 
     def update(self):
         if self.dead_anim > 0:
             self.dead_anim -= 1
             self.rect.y += 2
             return
+
+        # Patrol movement
         self.rect.x += self.speed * self.direction
         if self.rect.x > self.start_x + self.patrol_width or self.rect.x < self.start_x:
             self.direction *= -1
 
-    def flash_and_kill(self):
-        for _ in range(12):
-            vx = random.uniform(-4, 4)
-            vy = random.uniform(-4, -1)
-            particles.append({
-                "x": self.rect.centerx,
-                "y": self.rect.centery,
-                "vx": vx,
-                "vy": vy,
-                "life": random.randint(20, 35),
-                "size": random.randint(2, 5)
-            })
-        self.dead_anim = 1
+        # Update hitbox position
+        self.hitbox.topleft = (self.rect.x + self.hitbox_offset_x, self.rect.y + self.hitbox_offset_y)
+
+        # Animate and flip based on movement direction
+        self.animation_index += self.animation_speed
+        if self.animation_index >= len(self.images):
+            self.animation_index = 0
+        frame = self.images[int(self.animation_index)]
+        self.image = pygame.transform.flip(frame, self.direction == 1, False)
+
+
 
 # ---------------- COLLECTIBLE ----------------
 class Collectible(pygame.sprite.Sprite):
@@ -262,7 +332,6 @@ class VictoryBlock(pygame.sprite.Sprite):
 
 # ---------------- Helper: fade to white ----------------
 def fade_to_white(duration_ms=800):
-    """Fade the current screen to white over duration_ms milliseconds."""
     snapshot = screen.copy()
     white = pygame.Surface((WIDTH, HEIGHT))
     white.fill((255, 255, 255))
@@ -421,17 +490,17 @@ for p in platform_data:
 enemies = pygame.sprite.Group()
 
 # Section 1 enemy (on platform at 350,330)
-enemies.add(Enemy(360, 330 - 40, patrol_width=80, speed=2))
+enemies.add(Enemy(360, 290, patrol_width=80, speed=2))
 
 # Section 2 enemy (on platform at 900,240)
-enemies.add(Enemy(930, 240 - 40, patrol_width=100, speed=2))
+enemies.add(Enemy(890, 200, patrol_width=100, speed=2))
 
 # Section 3 – Skeleton Gauntlet
-enemies.add(Enemy(1350, 260 - 40, patrol_width=160, speed=2))
-enemies.add(Enemy(1590, 200 - 40, patrol_width=120, speed=2.4))
+enemies.add(Enemy(1350, 220, patrol_width=160, speed=2))
+enemies.add(Enemy(1590, 160, patrol_width=120, speed=2.4))
 
 # Section 4 – last enemy before gate
-enemies.add(Enemy(2120, 320 - 40, patrol_width=150, speed=3))
+enemies.add(Enemy(2120, 280, patrol_width=150, speed=3))
 
 # Collectibles: placed on top of platforms (centered-ish)
 collectible_positions = [
